@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  heatmap-web:
+    build: .
+    container_name: brigade-heatmap-web
+    ports:
+      - "5000:5000"
+    environment:
+      - BRIGADE_API_URL=${BRIGADE_API_URL:-http://host.docker.internal:12056}
+      - BRIGADE_USERNAME=${BRIGADE_USERNAME:-admin}
+      - BRIGADE_PASSWORD=${BRIGADE_PASSWORD:-admin}
+      - DATABASE_PATH=/app/data/devices.db
+      - UPDATE_INTERVAL_MINUTES=${UPDATE_INTERVAL_MINUTES:-10}
+      - ALARM_UPDATE_INTERVAL_MINUTES=${ALARM_UPDATE_INTERVAL_MINUTES:-5}
+      - ALARM_LOOKBACK_MINUTES=${ALARM_LOOKBACK_MINUTES:-10}
+      - ALARM_BATCH_SIZE=${ALARM_BATCH_SIZE:-50}
+      - ALARM_CLEANUP_DAYS=${ALARM_CLEANUP_DAYS:-30}
+    volumes:
+      - heatmap-data:/app/data
+      - heatmap-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - heatmap-network
+
+  heatmap-sync:
+    build: .
+    container_name: brigade-heatmap-sync
+    command: ["python", "main.py", "--command", "start"]
+    environment:
+      - BRIGADE_API_URL=${BRIGADE_API_URL:-http://host.docker.internal:12056}
+      - BRIGADE_USERNAME=${BRIGADE_USERNAME:-admin}
+      - BRIGADE_PASSWORD=${BRIGADE_PASSWORD:-admin}
+      - DATABASE_PATH=/app/data/devices.db
+      - UPDATE_INTERVAL_MINUTES=${UPDATE_INTERVAL_MINUTES:-10}
+      - ALARM_UPDATE_INTERVAL_MINUTES=${ALARM_UPDATE_INTERVAL_MINUTES:-5}
+      - ALARM_LOOKBACK_MINUTES=${ALARM_LOOKBACK_MINUTES:-10}
+      - ALARM_BATCH_SIZE=${ALARM_BATCH_SIZE:-50}
+      - ALARM_CLEANUP_DAYS=${ALARM_CLEANUP_DAYS:-30}
+    volumes:
+      - heatmap-data:/app/data
+      - heatmap-logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      - heatmap-web
+    networks:
+      - heatmap-network
+
+volumes:
+  heatmap-data:
+    driver: local
+  heatmap-logs:
+    driver: local
+
+networks:
+  heatmap-network:
+    driver: bridge

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geographic Heat Map Visualization</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Geographic Heat Map Visualization</h1>
+            <div class="controls">
+                <div class="date-picker">
+                    <label for="start-date">Start Date:</label>
+                    <input type="date" id="start-date">
+                    <label for="end-date">End Date:</label>
+                    <input type="date" id="end-date">
+                    <button id="apply-filter">Apply Filter</button>
+                </div>
+                <div class="map-controls">
+                    <label for="heat-radius">Heat Radius:</label>
+                    <input type="range" id="heat-radius" min="10" max="50" value="25">
+                    <span id="radius-value">25</span>
+                    <label for="heat-intensity">Intensity:</label>
+                    <input type="range" id="heat-intensity" min="0.1" max="2" step="0.1" value="1">
+                    <span id="intensity-value">1</span>
+                </div>
+            </div>
+        </header>
+        
+        <main>
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+            <div id="loading" class="hidden">Loading data...</div>
+            <div id="error" class="hidden">Error loading data</div>
+            <div id="data-info">
+                <span id="point-count">0 data points</span>
+            </div>
+        </main>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

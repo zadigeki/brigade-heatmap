@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brigade Electronics - Alarm Heatmap</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.min.js"></script>
+    
+    <!-- Date picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        .controls-panel {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 0.5rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            min-width: 120px;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Multi-select dropdown styles */
+        .multi-select-container {
+            position: relative;
+            min-width: 180px;
+        }
+
+        .multi-select-button {
+            width: 100%;
+            padding: 0.5rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            background: white;
+            font-size: 0.9rem;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+
+        .multi-select-button:hover,
+        .multi-select-button:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .dropdown-arrow {
+            font-size: 0.8rem;
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .multi-select-button.open .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1001;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .multi-select-dropdown.open {
+            display: block;
+        }
+
+        .multi-select-options {
+            padding: 0.25rem 0;
+        }
+
+        .multi-select-option {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .multi-select-option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            margin-right: 0.5rem;
+            margin-left: 0;
+        }
+
+        .multi-select-divider {
+            height: 1px;
+            background-color: #e0e0e0;
+            margin: 0.25rem 0;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .map-container {
+            height: calc(100vh - 180px);
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 200px;
+            z-index: 1000;
+        }
+
+        .stats-panel h3 {
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(3px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+        .close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .close:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .detail-item {
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .detail-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .alarm-severity {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-high {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .severity-medium {
+            background: #feebc8;
+            color: #dd6b20;
+        }
+
+        .severity-low {
+            background: #c6f6d5;
+            color: #2f855a;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .controls-panel {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                margin: 10% auto;
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Brigade Electronics - Alarm Heatmap</h1>
+        <div class="subtitle">Real-time visualization of vehicle alarm data</div>
+    </div>
+
+    <div class="controls-panel">
+        <div class="control-group">
+            <label>Time Range</label>
+            <select id="timeRange">
+                <option value="24">Last 24 Hours</option>
+                <option value="168">Last Week</option>
+                <option value="720">Last Month</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+
+        <div class="control-group" id="customDateRange" style="display: none;">
+            <label>Date Range</label>
+            <input type="text" id="dateRangePicker" placeholder="Select date range">
+        </div>
+
+        <div class="control-group">
+            <label>Device</label>
+            <select id="deviceFilter">
+                <option value="">All Devices</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Alarm Types</label>
+            <div class="multi-select-container">
+                <button type="button" class="multi-select-button" id="alarmTypeButton">
+                    <span id="alarmTypeButtonText">All Types</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="multi-select-dropdown" id="alarmTypeDropdown">
+                    <div class="multi-select-options">
+                        <label class="multi-select-option">
+                            <input type="checkbox" value="all" id="selectAllAlarms" checked>
+                            <span>All Types</span>
+                        </label>
+                        <div class="multi-select-divider"></div>
+                        <div id="alarmTypeOptions">
+                            <!-- Alarm type options will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Max Records</label>
+            <select id="maxRecords">
+                <option value="500">500</option>
+                <option value="1000" selected>1000</option>
+                <option value="2000">2000</option>
+                <option value="5000">5000</option>
+            </select>
+        </div>
+
+        <button class="btn btn-primary" onclick="refreshMap()">Refresh Map</button>
+        <button class="btn btn-secondary" onclick="toggleHeatmap()">Toggle View</button>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+        
+        <div class="stats-panel">
+            <h3>Statistics</h3>
+            <div class="stat-item">
+                <span class="stat-label">Total Alarms:</span>
+                <span class="stat-value" id="totalAlarms">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Visible:</span>
+                <span class="stat-value" id="visibleAlarms">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Devices:</span>
+                <span class="stat-value" id="totalDevices">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Last Update:</span>
+                <span class="stat-value" id="lastUpdate">-</span>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div>Loading alarm data...</div>
+        </div>
+    </div>
+
+    <!-- Modal for alarm details -->
+    <div id="alarmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Alarm Details</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Alarm details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let map;
+        let heatLayer;
+        let markersLayer;
+        let currentAlarmData = [];
+        let isHeatmapView = true;
+        let dateRangePicker;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            initializeDatePicker();
+            loadDevices();
+            loadAlarmTypes();
+            loadAlarmData();
+            setupEventListeners();
+        });
+
+        function initializeMap() {
+            // Initialize map centered on a default location
+            map = L.map('map').setView([40.7128, -74.0060], 10);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Initialize layers
+            markersLayer = L.layerGroup().addTo(map);
+        }
+
+        function initializeDatePicker() {
+            dateRangePicker = flatpickr("#dateRangePicker", {
+                mode: "range",
+                dateFormat: "Y-m-d",
+                defaultDate: [new Date(Date.now() - 24*60*60*1000), new Date()]
+            });
+        }
+
+        function setupEventListeners() {
+            // Time range change handler
+            document.getElementById('timeRange').addEventListener('change', function() {
+                const customRange = document.getElementById('customDateRange');
+                if (this.value === 'custom') {
+                    customRange.style.display = 'block';
+                } else {
+                    customRange.style.display = 'none';
+                }
+            });
+
+            // Modal close handlers
+            document.querySelector('.close').addEventListener('click', closeModal);
+            document.getElementById('alarmModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeModal();
+                }
+            });
+
+            // Escape key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeModal();
+                }
+            });
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const select = document.getElementById('deviceFilter');
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.terid;
+                        option.textContent = `${device.car_license} (${device.terid})`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        async function loadAlarmTypes() {
+            try {
+                const response = await fetch('/api/alarm-types');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('alarmTypeOptions');
+                    data.alarm_types.forEach(alarmType => {
+                        const label = document.createElement('label');
+                        label.className = 'multi-select-option';
+                        label.innerHTML = `
+                            <input type="checkbox" value="${alarmType.type}" class="alarm-type-checkbox">
+                            <span>${alarmType.name} (${alarmType.count})</span>
+                        `;
+                        container.appendChild(label);
+                    });
+                    
+                    // Setup multi-select event handlers
+                    setupAlarmTypeMultiSelect();
+                }
+            } catch (error) {
+                console.error('Error loading alarm types:', error);
+            }
+        }
+
+        async function loadAlarmData() {
+            const loading = document.getElementById('loading');
+            loading.classList.add('active');
+
+            try {
+                const params = buildApiParams();
+                const response = await fetch(`/api/alarms?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    currentAlarmData = data.data;
+                    updateMap();
+                    updateStats(data);
+                } else {
+                    console.error('Error from API:', data.error);
+                    alert('Error loading alarm data: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error loading alarm data:', error);
+                alert('Error loading alarm data. Please check your connection.');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function buildApiParams() {
+            const timeRange = document.getElementById('timeRange').value;
+            const deviceFilter = document.getElementById('deviceFilter').value;
+            const maxRecords = document.getElementById('maxRecords').value;
+
+            const params = new URLSearchParams();
+
+            if (timeRange === 'custom') {
+                const dateRange = dateRangePicker.selectedDates;
+                if (dateRange.length === 2) {
+                    params.append('start_date', dateRange[0].toISOString().split('T')[0]);
+                    params.append('end_date', dateRange[1].toISOString().split('T')[0]);
+                }
+            } else {
+                params.append('hours', timeRange);
+            }
+
+            if (deviceFilter) params.append('device_id', deviceFilter);
+            
+            // Handle multi-select alarm types
+            const selectedAlarmTypes = getSelectedAlarmTypes();
+            if (selectedAlarmTypes.length > 0) {
+                params.append('alarm_types', selectedAlarmTypes.join(','));
+            }
+            
+            params.append('limit', maxRecords);
+
+            return params.toString();
+        }
+
+        function setupAlarmTypeMultiSelect() {
+            const button = document.getElementById('alarmTypeButton');
+            const dropdown = document.getElementById('alarmTypeDropdown');
+            const selectAllCheckbox = document.getElementById('selectAllAlarms');
+            
+            // Toggle dropdown visibility
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const isOpen = dropdown.classList.contains('open');
+                if (isOpen) {
+                    closeAlarmTypeDropdown();
+                } else {
+                    openAlarmTypeDropdown();
+                }
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!button.contains(e.target) && !dropdown.contains(e.target)) {
+                    closeAlarmTypeDropdown();
+                }
+            });
+            
+            // Handle "Select All" checkbox
+            selectAllCheckbox.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.alarm-type-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateAlarmTypeButtonText();
+            });
+            
+            // Handle individual alarm type checkboxes
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('alarm-type-checkbox')) {
+                    updateSelectAllState();
+                    updateAlarmTypeButtonText();
+                }
+            });
+        }
+        
+        function openAlarmTypeDropdown() {
+            const button = document.getElementById('alarmTypeButton');
+            const dropdown = document.getElementById('alarmTypeDropdown');
+            button.classList.add('open');
+            dropdown.classList.add('open');
+        }
+        
+        function closeAlarmTypeDropdown() {
+            const button = document.getElementById('alarmTypeButton');
+            const dropdown = document.getElementById('alarmTypeDropdown');
+            button.classList.remove('open');
+            dropdown.classList.remove('open');
+        }
+        
+        function updateSelectAllState() {
+            const checkboxes = document.querySelectorAll('.alarm-type-checkbox');
+            const selectAllCheckbox = document.getElementById('selectAllAlarms');
+            const checkedCount = document.querySelectorAll('.alarm-type-checkbox:checked').length;
+            
+            if (checkedCount === 0) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+        
+        function updateAlarmTypeButtonText() {
+            const selectedTypes = getSelectedAlarmTypes();
+            const buttonText = document.getElementById('alarmTypeButtonText');
+            
+            if (selectedTypes.length === 0) {
+                buttonText.textContent = 'All Types';
+            } else if (selectedTypes.length === 1) {
+                const checkbox = document.querySelector(`.alarm-type-checkbox[value="${selectedTypes[0]}"]`);
+                const label = checkbox.parentElement.querySelector('span').textContent;
+                buttonText.textContent = label.split(' (')[0]; // Remove count from display
+            } else {
+                buttonText.textContent = `${selectedTypes.length} Types Selected`;
+            }
+        }
+        
+        function getSelectedAlarmTypes() {
+            const selectAllCheckbox = document.getElementById('selectAllAlarms');
+            if (selectAllCheckbox && selectAllCheckbox.checked) {
+                return []; // Return empty array for "all types"
+            }
+            
+            const checkboxes = document.querySelectorAll('.alarm-type-checkbox:checked');
+            return Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
+        }
+
+        function updateMap() {
+            // Clear existing layers
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+            }
+            markersLayer.clearLayers();
+
+            if (currentAlarmData.length === 0) {
+                return;
+            }
+
+            if (isHeatmapView) {
+                // Create heatmap
+                const heatData = currentAlarmData.map(alarm => [
+                    alarm.lat, 
+                    alarm.lng, 
+                    alarm.intensity
+                ]);
+
+                heatLayer = L.heatLayer(heatData, {
+                    radius: 25,
+                    blur: 15,
+                    maxZoom: 17,
+                    max: 1.0,
+                    gradient: {
+                        0.0: 'blue',
+                        0.4: 'cyan', 
+                        0.6: 'lime',
+                        0.8: 'yellow',
+                        1.0: 'red'
+                    }
+                }).addTo(map);
+            } else {
+                // Create markers
+                currentAlarmData.forEach(alarm => {
+                    const marker = L.circleMarker([alarm.lat, alarm.lng], {
+                        radius: 8,
+                        fillColor: getAlarmColor(alarm.alarm_type),
+                        color: '#fff',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+
+                    marker.on('click', () => showAlarmDetails(alarm.id));
+                    markersLayer.addLayer(marker);
+                });
+            }
+
+            // Fit map to data bounds if we have data
+            if (currentAlarmData.length > 0) {
+                const group = new L.featureGroup(
+                    currentAlarmData.map(alarm => L.marker([alarm.lat, alarm.lng]))
+                );
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        function getAlarmColor(alarmType) {
+            const colorMap = {
+                1: '#3498db',   // Video Loss - Blue
+                2: '#95a5a6',   // Motion Detection - Gray
+                4: '#e74c3c',   // HDD/SD Error - Red
+                13: '#c0392b',  // Panic Button - Dark Red
+                15: '#f39c12',  // High Speed - Orange
+                17: '#e67e22',  // G-Force - Dark Orange
+                19: '#8e44ad',  // Unauthorised Ignition - Purple
+                58: '#d35400',  // Driver Fatigue - Dark Orange
+                59: '#c0392b',  // No Driver - Dark Red
+                64: '#f1c40f'   // Forward Collision Warning - Yellow
+            };
+            return colorMap[alarmType] || '#7f8c8d';
+        }
+
+        async function showAlarmDetails(alarmId) {
+            try {
+                const response = await fetch(`/api/alarm/${alarmId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayAlarmModal(data.alarm, data.device);
+                } else {
+                    alert('Error loading alarm details: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error loading alarm details:', error);
+                alert('Error loading alarm details');
+            }
+        }
+
+        function displayAlarmModal(alarm, device) {
+            const modalBody = document.getElementById('modalBody');
+            
+            const severity = getAlarmSeverity(alarm.alarm_type);
+            const alarmTypeName = getAlarmTypeName(alarm.alarm_type);
+
+            modalBody.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Alarm Type</div>
+                        <div class="detail-value">${alarmTypeName}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Severity</div>
+                        <div class="detail-value">
+                            <span class="alarm-severity severity-${severity.toLowerCase()}">${severity}</span>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Device ID</div>
+                        <div class="detail-value">${alarm.terid}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Vehicle</div>
+                        <div class="detail-value">${device ? device.car_license : 'Unknown'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">GPS Time</div>
+                        <div class="detail-value">${new Date(alarm.gps_time).toLocaleString()}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Location</div>
+                        <div class="detail-value">${alarm.gps_lat.toFixed(6)}, ${alarm.gps_lng.toFixed(6)}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Speed</div>
+                        <div class="detail-value">${alarm.speed || 0} km/h</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Direction</div>
+                        <div class="detail-value">${alarm.direction || 0}°</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Altitude</div>
+                        <div class="detail-value">${alarm.altitude || 0} m</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Content</div>
+                        <div class="detail-value">${alarm.alarm_content || 'No additional information'}</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('alarmModal').style.display = 'block';
+        }
+
+        function getAlarmTypeName(alarmType) {
+            const typeNames = {
+                1: "Video Loss", 2: "Motion Detection", 3: "Blind Detection", 4: "HDD/SD Error",
+                5: "IO 1", 6: "IO 2", 7: "IO 3", 8: "IO 4", 9: "IO 5", 10: "IO 6", 11: "IO 7", 12: "IO 8",
+                13: "Panic Button", 14: "Low Speed", 15: "High Speed", 16: "Low Voltage", 17: "G-Force",
+                18: "Geo-Fence", 19: "Unauthorised Ignition", 20: "Unauthorised Shutdown", 21: "GPS Fail",
+                22: "GPS Antenna Short", 23: "GPS Antenna Open", 24: "Overspeed", 25: "Idle Time",
+                26: "Harsh Acceleration", 27: "Harsh Cornering", 28: "Harsh Braking", 29: "Temperature Alarm",
+                30: "Fuel Alarm", 31: "Fuel Theft", 32: "Fuel Fill", 33: "Power Disconnected", 34: "Power Connected",
+                35: "Battery Low", 36: "Impact Alarm", 37: "SOS", 38: "Man Down", 39: "External Device Alarm",
+                40: "External Power On", 41: "External Power Off", 42: "System Power On", 43: "System Power Off",
+                44: "White List", 45: "Black List", 46: "RFID Card", 47: "Temperature Error",
+                48: "Acceleration Sensor Error", 49: "TTS Error", 50: "Camera Error", 51: "Voltage Error",
+                52: "Speed Limit", 53: "Route Deviation", 54: "Enter Area", 55: "Exit Area", 56: "Road Limit",
+                57: "Dangerous Driving", 58: "Driver Fatigue", 59: "No Driver", 60: "Phone Detection",
+                61: "Smoking Detection", 62: "Driver Distraction", 63: "Lane Departure", 64: "Forward Collision Warning",
+                65: "Pedestrian Collision Warning", 66: "Blind Spot", 67: "Driver Change", 68: "Abnormal Fuel Consumption",
+                69: "VSS Speed", 70: "Oil Pressure", 71: "Water Temperature", 72: "Neutral Safety Switch",
+                73: "Handbrake", 74: "Door Open", 75: "Seat Belt", 76: "Key Switch", 77: "Reverse Gear",
+                78: "Left Turn", 79: "Right Turn", 80: "Work Light", 81: "Retarder", 82: "Air Pressure",
+                83: "Engine Error", 84: "Auxiliary Battery", 85: "Emergency Button", 86: "Loading",
+                87: "Unloading", 88: "Driving Without License", 89: "Cumulative Driving Time", 90: "Road Maintenance",
+                91: "Fatigue Driving", 92: "Overtime Parking", 93: "Route Change", 94: "VSS Failure",
+                95: "Oil Shortage", 96: "Vehicle Theft", 97: "Illegal Ignition", 98: "Illegal Displacement",
+                99: "Collision Rollover", 100: "Side Rollover", 134: "Picture Upload", 135: "Video Upload",
+                136: "IC Card", 137: "Fingerprint", 138: "Retina", 139: "Face Recognition", 140: "Voice",
+                141: "Weight", 142: "Trailer Connection", 143: "Trailer Disconnection", 144: "Passenger Up",
+                145: "Passenger Down", 146: "School Bus", 147: "Emergency Evacuation", 148: "Anti-Theft",
+                149: "Refueling", 150: "Driver Hours", 151: "Custom Alarm", 152: "Maintenance",
+                153: "Diagnostic", 154: "Eco Driving", 155: "Green Band", 156: "Cruise Control",
+                157: "Lane Change", 158: "Tailgating", 159: "Cornering", 160: "Acceleration",
+                161: "Deceleration", 162: "Following Distance Monitoring", 163: "Speeding", 164: "Yawning Detection",
+                165: "Eyes Closed", 166: "Looking Away", 167: "Head Down", 168: "Using Phone"
+            };
+            return typeNames[alarmType] || `Unknown (${alarmType})`;
+        }
+
+        function getAlarmSeverity(alarmType) {
+            const highSeverity = [13, 17, 19, 36, 58, 59, 64]; // Panic, G-Force, Unauthorized, Impact, etc.
+            const mediumSeverity = [15, 16, 29, 60, 61, 62, 63]; // Speed, voltage, temp, driver behavior
+            
+            if (highSeverity.includes(alarmType)) return 'High';
+            if (mediumSeverity.includes(alarmType)) return 'Medium';
+            return 'Low';
+        }
+
+        function updateStats(data) {
+            document.getElementById('totalAlarms').textContent = data.count.toLocaleString();
+            document.getElementById('visibleAlarms').textContent = currentAlarmData.length.toLocaleString();
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            
+            // Load total devices count
+            loadStatsFromApi();
+        }
+
+        async function loadStatsFromApi() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('totalDevices').textContent = data.stats.total_devices || '-';
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('alarmModal').style.display = 'none';
+        }
+
+        function refreshMap() {
+            loadAlarmData();
+        }
+
+        function toggleHeatmap() {
+            isHeatmapView = !isHeatmapView;
+            updateMap();
+            
+            const button = document.querySelector('button[onclick="toggleHeatmap()"]');
+            button.textContent = isHeatmapView ? 'Show Markers' : 'Show Heatmap';
+        }
+    </script>
+</body>
+</html>

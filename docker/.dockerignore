@@ -1,0 +1,64 @@
+# Docker ignore file for Brigade Electronics Heatmap System
+
+# Development files
+.git
+.gitignore
+*.md
+HEATMAP_PROJECT.md
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing
+test_*.py
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs (will be created in container)
+logs/*.log
+
+# Database (will be created in container)
+devices.db
+
+# Documentation
+API\ Instruction\ Guide\ -\ v1.1\ -\ ENG.pdf
+
+# Environment files
+.env
+*.env
+
+# Temporary files
+*.tmp
+*.temp
