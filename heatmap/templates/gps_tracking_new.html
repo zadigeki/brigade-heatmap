@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}GPS Tracking - Brigade Electronics{% endblock %}
+
+{% block extra_head %}
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    
+    <style>
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .vehicle-marker {
+            background-color: #3498db;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        
+        .vehicle-marker.offline {
+            background-color: #7f8c8d;
+        }
+        
+        .vehicle-marker.moving {
+            background-color: #27ae60;
+        }
+        
+        .vehicle-marker.stopped {
+            background-color: #e74c3c;
+        }
+        
+        .speed-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background-color: #2c3e50;
+            color: white;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 10px;
+            min-width: 25px;
+            text-align: center;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 15px;
+            z-index: 1000;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+        
+        .info-panel h3 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #2c3e50;
+        }
+        
+        .device-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .device-item {
+            padding: 10px;
+            border-bottom: 1px solid #ecf0f1;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        
+        .device-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .device-item.selected {
+            background-color: #e3f2fd;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-online {
+            background-color: #27ae60;
+        }
+        
+        .status-offline {
+            background-color: #7f8c8d;
+        }
+        
+        .popup-content {
+            min-width: 250px;
+        }
+        
+        .popup-content h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        
+        .popup-row {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .popup-label {
+            font-weight: bold;
+            color: #7f8c8d;
+        }
+        
+        .address-loading {
+            color: #3498db;
+            font-style: italic;
+        }
+        
+        .stats-summary {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .stats-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .legend-panel {
+            position: absolute;
+            bottom: 60px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .legend-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .legend-marker {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h3><i class="fas fa-truck"></i> Vehicles (<span id="vehicle-count">0</span>)</h3>
+        
+        <div class="stats-summary">
+            <div class="stats-row">
+                <span>Moving:</span>
+                <span id="moving-count" style="color: #27ae60; font-weight: bold;">0</span>
+            </div>
+            <div class="stats-row">
+                <span>Stopped:</span>
+                <span id="stopped-count" style="color: #e74c3c; font-weight: bold;">0</span>
+            </div>
+            <div class="stats-row">
+                <span>Offline:</span>
+                <span id="offline-count" style="color: #7f8c8d; font-weight: bold;">0</span>
+            </div>
+        </div>
+        
+        <div class="mb-2">
+            <input type="text" class="form-control form-control-sm" id="search-input" 
+                   placeholder="Search vehicles...">
+        </div>
+        
+        <div class="device-list" id="device-list">
+            <!-- Device items will be populated here -->
+        </div>
+    </div>
+    
+    <div class="legend-panel">
+        <div class="legend-title">Vehicle Status</div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: #27ae60;"></div>
+            <span>Moving (Speed > 5 km/h)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: #e74c3c;"></div>
+            <span>Stopped (Speed ≤ 5 km/h)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: #7f8c8d;"></div>
+            <span>Offline (> 30 min)</span>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([51.505, -0.09], 13);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Store markers and device data
+        let markers = {};
+        let devices = {};
+        let selectedDevice = null;
+        
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'Unknown';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+        
+        // Calculate time difference
+        function getTimeDifference(timestamp) {
+            if (!timestamp) return 'Unknown';
+            const now = new Date();
+            const then = new Date(timestamp);
+            const diffMs = now - then;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} mins ago`;
+            
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours} hours ago`;
+            
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays} days ago`;
+        }
+        
+        // Get vehicle status based on speed and last update
+        function getVehicleStatus(speed, lastUpdate) {
+            const timeDiff = new Date() - new Date(lastUpdate);
+            const minutesAgo = timeDiff / 60000;
+            
+            if (minutesAgo > 30) return 'offline';
+            if (speed > 5) return 'moving';
+            return 'stopped';
+        }
+        
+        // Create marker HTML
+        function createMarkerHtml(speed, status) {
+            const statusClass = status === 'offline' ? 'offline' : 
+                               status === 'moving' ? 'moving' : 'stopped';
+            return `<div class="vehicle-marker ${statusClass}">
+                        <span class="speed-badge">${speed || 0}</span>
+                    </div>`;
+        }
+        
+        // Get address from coordinates using OpenStreetMap Nominatim
+        async function getAddress(lat, lng) {
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
+                    {
+                        headers: {
+                            'User-Agent': 'Brigade GPS Tracking System'
+                        }
+                    }
+                );
+                
+                if (!response.ok) return null;
+                
+                const data = await response.json();
+                return data.display_name || null;
+            } catch (error) {
+                console.error('Error fetching address:', error);
+                return null;
+            }
+        }
+        
+        // Create popup content
+        function createPopupContent(device) {
+            const status = getVehicleStatus(device.speed, device.last_updated);
+            const statusText = status === 'offline' ? 'Offline' :
+                              status === 'moving' ? 'Moving' : 'Stopped';
+            
+            return `
+                <div class="popup-content">
+                    <h4>${device.car_license || device.terid}</h4>
+                    <div class="popup-row">
+                        <span class="popup-label">Status:</span> ${statusText}
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Speed:</span> ${device.speed || 0} km/h
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Altitude:</span> ${device.altitude || 0} m
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Direction:</span> ${device.direction || 0}°
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Last Update:</span> ${getTimeDifference(device.last_updated)}
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Address:</span> 
+                        <span id="address-${device.terid}" class="address-loading">Loading...</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Update device list in sidebar
+        function updateDeviceList() {
+            const deviceList = document.getElementById('device-list');
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            
+            deviceList.innerHTML = '';
+            
+            let movingCount = 0;
+            let stoppedCount = 0;
+            let offlineCount = 0;
+            
+            Object.values(devices)
+                .filter(device => {
+                    const carLicense = (device.car_license || '').toLowerCase();
+                    const terid = (device.terid || '').toLowerCase();
+                    return carLicense.includes(searchTerm) || terid.includes(searchTerm);
+                })
+                .sort((a, b) => (a.car_license || a.terid).localeCompare(b.car_license || b.terid))
+                .forEach(device => {
+                    const status = getVehicleStatus(device.speed, device.last_updated);
+                    const statusClass = status === 'offline' ? 'status-offline' : 'status-online';
+                    
+                    // Count statuses
+                    if (status === 'moving') movingCount++;
+                    else if (status === 'stopped') stoppedCount++;
+                    else offlineCount++;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'device-item';
+                    if (selectedDevice === device.terid) {
+                        item.classList.add('selected');
+                    }
+                    
+                    item.innerHTML = `
+                        <span class="status-indicator ${statusClass}"></span>
+                        <strong>${device.car_license || device.terid}</strong>
+                        <br>
+                        <small class="text-muted">
+                            ${device.speed || 0} km/h · ${getTimeDifference(device.last_updated)}
+                        </small>
+                    `;
+                    
+                    item.onclick = () => {
+                        selectedDevice = device.terid;
+                        updateDeviceList();
+                        
+                        const marker = markers[device.terid];
+                        if (marker) {
+                            map.setView(marker.getLatLng(), 16);
+                            marker.openPopup();
+                        }
+                    };
+                    
+                    deviceList.appendChild(item);
+                });
+            
+            // Update counts
+            document.getElementById('vehicle-count').textContent = Object.keys(devices).length;
+            document.getElementById('moving-count').textContent = movingCount;
+            document.getElementById('stopped-count').textContent = stoppedCount;
+            document.getElementById('offline-count').textContent = offlineCount;
+        }
+        
+        // Load GPS positions
+        async function loadGPSPositions() {
+            try {
+                const response = await fetch('/api/gps/positions');
+                const data = await response.json();
+                
+                if (!data.success) {
+                    console.error('Failed to load GPS positions:', data.error);
+                    return;
+                }
+                
+                // Clear old devices that are no longer in the response
+                const currentDeviceIds = new Set(data.positions.map(pos => pos.terid));
+                Object.keys(devices).forEach(terid => {
+                    if (!currentDeviceIds.has(terid)) {
+                        if (markers[terid]) {
+                            map.removeLayer(markers[terid]);
+                            delete markers[terid];
+                        }
+                        delete devices[terid];
+                    }
+                });
+                
+                // Update or create markers
+                const bounds = L.latLngBounds();
+                
+                data.positions.forEach(position => {
+                    const lat = position.latitude;
+                    const lng = position.longitude;
+                    const terid = position.terid;
+                    
+                    devices[terid] = position;
+                    
+                    const status = getVehicleStatus(position.speed, position.last_updated);
+                    
+                    if (markers[terid]) {
+                        // Update existing marker
+                        markers[terid].setLatLng([lat, lng]);
+                        const icon = markers[terid].options.icon;
+                        icon.options.html = createMarkerHtml(position.speed, status);
+                        markers[terid].setIcon(icon);
+                        
+                        // Update popup if it's open
+                        if (markers[terid].isPopupOpen()) {
+                            markers[terid].setPopupContent(createPopupContent(position));
+                            
+                            // Fetch and update address
+                            getAddress(lat, lng).then(address => {
+                                const addressElement = document.getElementById(`address-${terid}`);
+                                if (addressElement) {
+                                    addressElement.textContent = address || 'Unknown location';
+                                    addressElement.classList.remove('address-loading');
+                                }
+                            });
+                        }
+                    } else {
+                        // Create new marker
+                        const icon = L.divIcon({
+                            className: 'custom-div-icon',
+                            html: createMarkerHtml(position.speed, status),
+                            iconSize: [40, 40],
+                            iconAnchor: [20, 20],
+                            popupAnchor: [0, -20]
+                        });
+                        
+                        const marker = L.marker([lat, lng], { icon: icon })
+                            .addTo(map)
+                            .bindPopup(createPopupContent(position));
+                        
+                        marker.on('popupopen', () => {
+                            // Fetch address when popup opens
+                            getAddress(lat, lng).then(address => {
+                                const addressElement = document.getElementById(`address-${terid}`);
+                                if (addressElement) {
+                                    addressElement.textContent = address || 'Unknown location';
+                                    addressElement.classList.remove('address-loading');
+                                }
+                            });
+                        });
+                        
+                        markers[terid] = marker;
+                    }
+                    
+                    bounds.extend([lat, lng]);
+                });
+                
+                // Fit map to show all markers on first load
+                if (Object.keys(markers).length > 0 && !map.hasBeenFitted) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                    map.hasBeenFitted = true;
+                }
+                
+                // Update device list
+                updateDeviceList();
+                
+                // Update last update time in parent window
+                if (window.parent && window.parent.updateLastUpdateTime) {
+                    window.parent.updateLastUpdateTime();
+                }
+                
+            } catch (error) {
+                console.error('Error loading GPS positions:', error);
+            }
+        }
+        
+        // Search functionality
+        document.getElementById('search-input').addEventListener('input', updateDeviceList);
+        
+        // Initial load
+        loadGPSPositions();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadGPSPositions, 30000);
+    </script>
+{% endblock %}

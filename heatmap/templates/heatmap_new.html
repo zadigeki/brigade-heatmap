@@ -1,0 +1,708 @@
+{% extends "base.html" %}
+
+{% block title %}Alarm Heatmap - Brigade Electronics{% endblock %}
+
+{% block extra_head %}
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Date picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    
+    <style>
+        .controls-panel {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .control-group {
+            display: inline-block;
+            margin-right: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            min-width: 150px;
+        }
+
+        .btn-filter {
+            padding: 0.5rem 1.5rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn-filter:hover {
+            background: #2980b9;
+        }
+
+        .btn-reset {
+            padding: 0.5rem 1rem;
+            background: #95a5a6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 0.5rem;
+        }
+
+        #map {
+            position: absolute;
+            top: 60px;
+            bottom: 35px;
+            left: 0;
+            right: 0;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 140px;
+            right: 20px;
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 280px;
+            z-index: 1000;
+        }
+
+        .stats-panel h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.2rem;
+            color: #2c3e50;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 60px;
+            left: 20px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .legend h4 {
+            margin: 0 0 0.75rem 0;
+            font-size: 1rem;
+            color: #2c3e50;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 0.75rem;
+            opacity: 0.8;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .loading-spinner {
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Ensure controls panel is below navbar */
+        .controls-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        #map {
+            top: 120px;
+        }
+
+        .multiselect-dropdown {
+            width: 200px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="controls-panel">
+        <div class="control-group">
+            <label>Time Range</label>
+            <select id="time-range">
+                <option value="24">Last 24 Hours</option>
+                <option value="48">Last 48 Hours</option>
+                <option value="72">Last 72 Hours</option>
+                <option value="168">Last Week</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+
+        <div class="control-group" id="custom-date-group" style="display: none;">
+            <label>Date Range</label>
+            <input type="text" id="date-range" placeholder="Select date range">
+        </div>
+
+        <div class="control-group">
+            <label>Device</label>
+            <select id="device-filter">
+                <option value="">All Devices</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Alarm Types</label>
+            <div id="alarm-type-filter" class="custom-multiselect">
+                <div class="multiselect-dropdown" onclick="toggleAlarmTypeDropdown()">
+                    <div class="multiselect-content">
+                        <span class="multiselect-placeholder">Select alarm types</span>
+                        <div class="multiselect-tags"></div>
+                    </div>
+                    <span class="multiselect-arrow">▼</span>
+                </div>
+                <div class="multiselect-options" id="alarm-type-options">
+                    <!-- Options will be populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>&nbsp;</label>
+            <button class="btn-filter" onclick="applyFilters()">Apply Filters</button>
+            <button class="btn-reset" onclick="resetFilters()">Reset</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="stats-panel">
+        <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+        <div class="stat-item">
+            <span class="stat-label">Total Alarms</span>
+            <span class="stat-value" id="total-alarms">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Active Devices</span>
+            <span class="stat-value" id="active-devices">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Most Common Alarm</span>
+            <span class="stat-value" id="common-alarm">-</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Hottest Zone</span>
+            <span class="stat-value" id="hot-zone">-</span>
+        </div>
+    </div>
+
+    <div class="legend">
+        <h4>Alarm Intensity</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #3498db;"></div>
+            <span>Low</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f39c12;"></div>
+            <span>Medium</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #e74c3c;"></div>
+            <span>High</span>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Loading alarm data...</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.min.js"></script>
+    
+    <!-- Date picker -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    
+    <!-- Custom multiselect styles -->
+    <style>
+        .custom-multiselect {
+            position: relative;
+        }
+        
+        .multiselect-dropdown {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            padding: 0.5rem;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .multiselect-placeholder {
+            color: #999;
+        }
+        
+        .multiselect-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            flex-grow: 1;
+        }
+        
+        .multiselect-tag {
+            background: #3498db;
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .multiselect-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .multiselect-arrow {
+            margin-left: 0.5rem;
+            font-size: 0.8rem;
+        }
+        
+        .multiselect-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .multiselect-options.show {
+            display: block;
+        }
+        
+        .multiselect-option {
+            padding: 0.5rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .multiselect-option:hover {
+            background: #f8f9fa;
+        }
+        
+        .multiselect-option.selected {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+    </style>
+    
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([51.505, -0.09], 10);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Initialize heatmap layer
+        let heatmapLayer = null;
+        let currentMarkers = [];
+        let selectedAlarmTypes = new Set();
+        let alarmTypesData = [];
+
+        // Custom multiselect functions
+        function toggleAlarmTypeDropdown() {
+            const options = document.getElementById('alarm-type-options');
+            options.classList.toggle('show');
+        }
+
+        function selectAlarmType(typeId, typeName) {
+            if (selectedAlarmTypes.has(typeId)) {
+                selectedAlarmTypes.delete(typeId);
+            } else {
+                selectedAlarmTypes.add(typeId);
+            }
+            updateAlarmTypeDisplay();
+            updateAlarmTypeOptions();
+        }
+
+        function removeAlarmType(typeId) {
+            selectedAlarmTypes.delete(typeId);
+            updateAlarmTypeDisplay();
+            updateAlarmTypeOptions();
+        }
+
+        function updateAlarmTypeDisplay() {
+            const container = document.querySelector('.multiselect-tags');
+            const placeholder = document.querySelector('.multiselect-placeholder');
+            
+            container.innerHTML = '';
+            
+            if (selectedAlarmTypes.size === 0) {
+                placeholder.style.display = 'inline';
+            } else {
+                placeholder.style.display = 'none';
+                selectedAlarmTypes.forEach(typeId => {
+                    const typeData = alarmTypesData.find(t => t.type.toString() === typeId.toString());
+                    if (typeData) {
+                        const tag = document.createElement('span');
+                        tag.className = 'multiselect-tag';
+                        tag.innerHTML = `${typeData.name} <span class="remove" onclick="removeAlarmType('${typeId}')">&times;</span>`;
+                        container.appendChild(tag);
+                    }
+                });
+            }
+        }
+
+        function updateAlarmTypeOptions() {
+            const options = document.getElementById('alarm-type-options');
+            options.innerHTML = '';
+            
+            alarmTypesData.forEach(alarmType => {
+                const option = document.createElement('div');
+                option.className = 'multiselect-option';
+                if (selectedAlarmTypes.has(alarmType.type.toString())) {
+                    option.classList.add('selected');
+                }
+                option.textContent = `${alarmType.name} (${alarmType.count})`;
+                option.onclick = () => selectAlarmType(alarmType.type.toString(), alarmType.name);
+                options.appendChild(option);
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const multiselect = document.getElementById('alarm-type-filter');
+            if (!multiselect.contains(event.target)) {
+                document.getElementById('alarm-type-options').classList.remove('show');
+            }
+        });
+
+        // Initialize date picker
+        const dateRangePicker = flatpickr("#date-range", {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            maxDate: "today"
+        });
+
+        // Handle time range change
+        document.getElementById('time-range').addEventListener('change', function() {
+            const customGroup = document.getElementById('custom-date-group');
+            if (this.value === 'custom') {
+                customGroup.style.display = 'inline-block';
+            } else {
+                customGroup.style.display = 'none';
+            }
+        });
+
+        // Load devices for filter
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const deviceSelect = document.getElementById('device-filter');
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.terid;
+                        option.textContent = `${device.car_license} (${device.terid})`;
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        // Load alarm types for filter
+        async function loadAlarmTypes() {
+            try {
+                const response = await fetch('/api/alarm-types');
+                const data = await response.json();
+                
+                if (data.success) {
+                    alarmTypesData = data.alarm_types;
+                    updateAlarmTypeOptions();
+                }
+            } catch (error) {
+                console.error('Error loading alarm types:', error);
+            }
+        }
+
+        // Load and display heatmap data
+        async function loadHeatmapData() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            try {
+                // Build query parameters
+                const params = new URLSearchParams();
+                
+                const timeRange = document.getElementById('time-range').value;
+                if (timeRange === 'custom') {
+                    const dateRange = dateRangePicker.selectedDates;
+                    if (dateRange.length === 2) {
+                        params.append('start_date', dateRange[0].toISOString().split('T')[0] + ' 00:00:00');
+                        params.append('end_date', dateRange[1].toISOString().split('T')[0] + ' 23:59:59');
+                    }
+                } else {
+                    params.append('hours', timeRange);
+                }
+                
+                const deviceFilter = document.getElementById('device-filter').value;
+                if (deviceFilter) {
+                    params.append('device_id', deviceFilter);
+                }
+                
+                // Get selected alarm types
+                if (selectedAlarmTypes.size > 0) {
+                    params.append('alarm_types', Array.from(selectedAlarmTypes).join(','));
+                }
+                
+                params.append('limit', '10000');
+                
+                // Fetch data
+                const response = await fetch(`/api/alarms?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateHeatmap(data.data);
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('Error loading heatmap data:', error);
+                alert('Error loading alarm data. Please try again.');
+            } finally {
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+        }
+
+        // Update heatmap display
+        function updateHeatmap(alarmData) {
+            // Clear existing heatmap
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+            }
+            
+            // Clear existing markers
+            currentMarkers.forEach(marker => map.removeLayer(marker));
+            currentMarkers = [];
+            
+            if (alarmData.length === 0) {
+                alert('No alarm data found for the selected filters.');
+                return;
+            }
+            
+            // Prepare heatmap data
+            const heatData = alarmData.map(alarm => [
+                alarm.lat,
+                alarm.lng,
+                alarm.intensity || 0.5
+            ]);
+            
+            // Create heatmap layer
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 25,
+                blur: 15,
+                maxZoom: 17,
+                gradient: {
+                    0.0: 'blue',
+                    0.5: 'yellow',
+                    1.0: 'red'
+                }
+            }).addTo(map);
+            
+            // Add click markers for alarm details
+            alarmData.forEach(alarm => {
+                const marker = L.circleMarker([alarm.lat, alarm.lng], {
+                    radius: 5,
+                    fillColor: '#ff7800',
+                    color: '#000',
+                    weight: 1,
+                    opacity: 0,
+                    fillOpacity: 0
+                });
+                
+                marker.bindPopup(`
+                    <strong>Alarm Type:</strong> ${alarm.alarm_content || 'Unknown'}<br>
+                    <strong>Device:</strong> ${alarm.terid}<br>
+                    <strong>Time:</strong> ${alarm.gps_time}<br>
+                    <strong>Speed:</strong> ${alarm.speed} km/h
+                `);
+                
+                marker.addTo(map);
+                currentMarkers.push(marker);
+            });
+            
+            // Fit map to show all data points
+            const bounds = L.latLngBounds(alarmData.map(a => [a.lat, a.lng]));
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        // Update statistics
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success && data.stats) {
+                    const stats = data.stats;
+                    
+                    // Update stat values
+                    document.getElementById('total-alarms').textContent = 
+                        stats.total_alarms ? stats.total_alarms.toLocaleString() : '0';
+                    
+                    document.getElementById('active-devices').textContent = 
+                        stats.total_devices || '0';
+                    
+                    // Find most common alarm type
+                    if (stats.alarm_type_counts && Object.keys(stats.alarm_type_counts).length > 0) {
+                        const mostCommon = Object.entries(stats.alarm_type_counts)
+                            .sort(([,a], [,b]) => b - a)[0];
+                        
+                        const alarmTypes = {
+                            1: "Video Loss", 2: "Motion Detection", 3: "Blind Detection",
+                            4: "HDD/SD Error", 5: "IO 1", 6: "IO 2", 13: "Panic Button",
+                            14: "Low Speed", 15: "High Speed", 16: "Low Voltage",
+                            17: "G-Force", 18: "Geo-Fence", 19: "Unauthorised Ignition"
+                        };
+                        
+                        document.getElementById('common-alarm').textContent = 
+                            alarmTypes[mostCommon[0]] || `Type ${mostCommon[0]}`;
+                    }
+                    
+                    // Update most active device
+                    if (stats.most_active_device) {
+                        document.getElementById('hot-zone').textContent = 
+                            stats.most_active_device.terid;
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        // Apply filters
+        function applyFilters() {
+            loadHeatmapData();
+        }
+
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('time-range').value = '24';
+            document.getElementById('custom-date-group').style.display = 'none';
+            document.getElementById('device-filter').value = '';
+            dateRangePicker.clear();
+            
+            // Reset alarm type filter
+            selectedAlarmTypes.clear();
+            updateAlarmTypeDisplay();
+            updateAlarmTypeOptions();
+            
+            loadHeatmapData();
+        }
+
+        // Initialize
+        async function initialize() {
+            await loadDevices();
+            await loadAlarmTypes();
+            await loadHeatmapData();
+            
+            // Auto-refresh every 5 minutes
+            setInterval(() => {
+                loadHeatmapData();
+            }, 300000);
+        }
+
+        // Start
+        initialize();
+    </script>
+{% endblock %}

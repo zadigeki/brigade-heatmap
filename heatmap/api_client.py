@@ -229,3 +229,51 @@ class BrigadeAPIClient:
             List of alarm details for the device or None if failed
         """
         return self.get_alarm_details([terid], start_time, end_time)
+    
+    def get_last_gps_positions(self, terid_list: List[str]) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch last GPS position information for specified devices
+        
+        Args:
+            terid_list: List of device terminal IDs
+            
+        Returns:
+            List of GPS position data or None if failed
+        """
+        if not self._ensure_authenticated():
+            logger.error("Failed to authenticate before fetching GPS data")
+            return None
+        
+        try:
+            gps_url = f"{self.base_url}/api/v1/basic/gps/last"
+            
+            payload = {
+                "key": self._auth_key,
+                "terid": terid_list
+            }
+            
+            logger.debug(f"Fetching GPS positions for {len(terid_list)} devices...")
+            response = self.session.post(
+                gps_url,
+                json=payload,
+                timeout=self.timeout,
+                headers={'Content-Type': 'application/json'}
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get('errorcode') == 200:
+                gps_data = data.get('data', [])
+                logger.debug(f"Successfully fetched GPS data for {len(gps_data)} devices")
+                return gps_data
+            else:
+                logger.error(f"API returned error for GPS data: {data}")
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch GPS positions: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching GPS positions: {e}")
+            return None

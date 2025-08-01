@@ -615,3 +615,112 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to fetch distinct alarm types: {e}")
             return []
+    
+    def store_gps_data(self, terid: str, car_license: Optional[str] = None,
+                      gps_time: Optional[datetime] = None, latitude: float = 0,
+                      longitude: float = 0, altitude: Optional[int] = None,
+                      speed: Optional[int] = None, recordspeed: Optional[int] = None,
+                      direction: Optional[int] = None, state: Optional[int] = None,
+                      address: Optional[str] = None) -> bool:
+        """
+        Store GPS tracking data for a device.
+        Uses REPLACE to update existing record for the device.
+        
+        Returns True if successful, False otherwise
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Use REPLACE to insert or update based on unique constraint
+                sql = """
+                    REPLACE INTO gps (
+                        terid, car_license, gps_time, latitude, longitude,
+                        altitude, speed, recordspeed, direction, state, address,
+                        last_updated
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """
+                
+                cursor.execute(sql, (
+                    terid,
+                    car_license,
+                    gps_time,
+                    latitude,
+                    longitude,
+                    altitude,
+                    speed,
+                    recordspeed,
+                    direction,
+                    state,
+                    address
+                ))
+                
+                conn.commit()
+                logger.debug(f"Stored GPS data for device {terid}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to store GPS data: {e}")
+            return False
+    
+    def get_all_gps_positions(self) -> List[Dict[str, Any]]:
+        """
+        Get the latest GPS positions for all devices
+        
+        Returns list of GPS position data
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                sql = """
+                    SELECT 
+                        g.id, g.terid, g.car_license, g.gps_time,
+                        g.latitude, g.longitude, g.altitude, g.speed,
+                        g.recordspeed, g.direction, g.state, g.address,
+                        g.last_updated,
+                        d.company_name, d.company_branch
+                    FROM gps g
+                    LEFT JOIN devices d ON g.terid = d.terid
+                    ORDER BY g.last_updated DESC
+                """
+                
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                
+                result = []
+                for row in rows:
+                    result.append(dict(row))
+                
+                return result
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch GPS positions: {e}")
+            return []
+    
+    def get_gps_by_terid(self, terid: str) -> Optional[Dict[str, Any]]:
+        """
+        Get GPS position for a specific device
+        
+        Returns GPS data or None if not found
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                sql = """
+                    SELECT 
+                        g.*, d.company_name, d.company_branch
+                    FROM gps g
+                    LEFT JOIN devices d ON g.terid = d.terid
+                    WHERE g.terid = ?
+                """
+                
+                cursor.execute(sql, (terid,))
+                row = cursor.fetchone()
+                
+                return dict(row) if row else None
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch GPS position for {terid}: {e}")
+            return None

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Brigade Electronics Monitoring System{% endblock %}</title>
+    
+    <!-- Bootstrap CSS for consistent styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Common styles -->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --danger-color: #e74c3c;
+            --warning-color: #f39c12;
+            --info-color: #3498db;
+            --light-color: #ecf0f1;
+            --dark-color: #34495e;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        /* Navigation Bar */
+        .navbar {
+            background-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 0;
+        }
+        
+        .navbar-brand {
+            color: white !important;
+            font-weight: 600;
+            font-size: 1.4rem;
+            padding: 1rem 1.5rem;
+        }
+        
+        .navbar-brand i {
+            margin-right: 0.5rem;
+            color: var(--secondary-color);
+        }
+        
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8) !important;
+            padding: 1rem 1.5rem !important;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover {
+            color: white !important;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-link.active {
+            color: white !important;
+            background-color: rgba(255, 255, 255, 0.15);
+            border-bottom: 3px solid var(--secondary-color);
+        }
+        
+        .nav-link i {
+            margin-right: 0.5rem;
+        }
+        
+        /* Status indicators */
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-left: 1rem;
+        }
+        
+        .status-badge.online {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .status-badge.offline {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        /* Main content area */
+        .main-content {
+            position: absolute;
+            top: 60px;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            overflow: auto;
+        }
+        
+        /* Footer */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            font-size: 0.875rem;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer .status-info {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        .footer .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .footer .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--success-color);
+        }
+        
+        .footer .status-indicator.warning {
+            background-color: var(--warning-color);
+        }
+        
+        .footer .status-indicator.error {
+            background-color: var(--danger-color);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .navbar-brand {
+                font-size: 1.1rem;
+                padding: 0.75rem 1rem;
+            }
+            
+            .nav-link {
+                padding: 0.75rem 1rem !important;
+                font-size: 0.9rem;
+            }
+            
+            .footer {
+                font-size: 0.75rem;
+                padding: 0.25rem 1rem;
+            }
+            
+            .footer .status-info {
+                gap: 1rem;
+            }
+            
+            .main-content {
+                top: 56px;
+                bottom: 35px;
+            }
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-truck"></i>
+                Brigade Electronics Monitoring
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="/">
+                            <i class="fas fa-fire"></i>
+                            Alarm Heatmap
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'gps_tracking' %}active{% endif %}" href="/gps-tracking">
+                            <i class="fas fa-map-marker-alt"></i>
+                            GPS Tracking
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/api/devices">
+                            <i class="fas fa-database"></i>
+                            API
+                        </a>
+                    </li>
+                </ul>
+                
+                <span class="status-badge online" id="system-status">
+                    <i class="fas fa-circle"></i> System Online
+                </span>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="status-info">
+            <div class="status-item">
+                <span class="status-indicator" id="api-status"></span>
+                <span>API Connection</span>
+            </div>
+            <div class="status-item">
+                <span class="status-indicator" id="db-status"></span>
+                <span>Database</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-clock"></i>
+                <span id="last-update">Last Update: Never</span>
+            </div>
+        </div>
+        
+        <div class="copyright">
+            © 2024 Brigade Electronics. All rights reserved.
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Common JavaScript -->
+    <script>
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = `Last Update: ${now.toLocaleTimeString()}`;
+        }
+        
+        // Check system status
+        async function checkSystemStatus() {
+            try {
+                // Check API status
+                const response = await fetch('/api/devices');
+                if (response.ok) {
+                    document.getElementById('api-status').className = 'status-indicator';
+                    document.getElementById('db-status').className = 'status-indicator';
+                    document.getElementById('system-status').className = 'status-badge online';
+                    document.getElementById('system-status').innerHTML = '<i class="fas fa-circle"></i> System Online';
+                } else {
+                    throw new Error('API Error');
+                }
+            } catch (error) {
+                document.getElementById('api-status').className = 'status-indicator error';
+                document.getElementById('system-status').className = 'status-badge offline';
+                document.getElementById('system-status').innerHTML = '<i class="fas fa-exclamation-circle"></i> System Error';
+            }
+        }
+        
+        // Initial check
+        checkSystemStatus();
+        updateLastUpdateTime();
+        
+        // Periodic checks
+        setInterval(checkSystemStatus, 30000);
+        setInterval(updateLastUpdateTime, 1000);
+    </script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -55,3 +55,29 @@ CREATE INDEX IF NOT EXISTS idx_alarms_gps_time ON alarms(gps_time);
 CREATE INDEX IF NOT EXISTS idx_alarms_alarm_type ON alarms(alarm_type);
 CREATE INDEX IF NOT EXISTS idx_alarms_last_updated ON alarms(last_updated);
 CREATE INDEX IF NOT EXISTS idx_alarms_created_at ON alarms(created_at);
+
+-- GPS table for storing vehicle location data
+CREATE TABLE IF NOT EXISTS gps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    terid VARCHAR(50) NOT NULL,
+    car_license VARCHAR(50),
+    gps_time TIMESTAMP,
+    latitude DECIMAL(10, 8),
+    longitude DECIMAL(11, 8),
+    altitude INTEGER,
+    speed INTEGER,
+    direction INTEGER,
+    state INTEGER,
+    address TEXT,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (terid) REFERENCES devices(terid)
+);
+
+-- Indexes for GPS table
+CREATE INDEX IF NOT EXISTS idx_gps_terid ON gps(terid);
+CREATE INDEX IF NOT EXISTS idx_gps_last_updated ON gps(last_updated);
+CREATE INDEX IF NOT EXISTS idx_gps_gps_time ON gps(gps_time);
+
+-- Unique constraint to store only the latest GPS position per device
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gps_unique ON gps(terid);

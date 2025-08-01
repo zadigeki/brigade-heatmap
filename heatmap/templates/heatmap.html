@@ -44,6 +44,24 @@
             opacity: 0.9;
             margin-top: 0.25rem;
         }
+        
+        .header-nav {
+            float: right;
+            margin-top: 0.5rem;
+        }
+        
+        .header-nav a {
+            color: white;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        
+        .header-nav a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
 
         .controls-panel {
             background: white;
@@ -392,6 +410,9 @@
 </head>
 <body>
     <div class="header">
+        <div class="header-nav">
+            <a href="/gps-tracking">GPS Tracking</a>
+        </div>
         <h1>Brigade Electronics - Alarm Heatmap</h1>
         <div class="subtitle">Real-time visualization of vehicle alarm data</div>
     </div>

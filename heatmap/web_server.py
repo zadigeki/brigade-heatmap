@@ -34,7 +34,7 @@ class AlarmHeatmapServer:
         @self.app.route('/')
         def index():
             """Main heatmap page"""
-            return render_template('heatmap.html')
+            return render_template('heatmap_simple.html')
         
         @self.app.route('/api/alarms')
         def get_alarms():
@@ -168,6 +168,68 @@ class AlarmHeatmapServer:
                     'success': False,
                     'error': str(e)
                 }), 500
+        
+        @self.app.route('/api/gps/positions')
+        def get_gps_positions():
+            """Get current GPS positions for all devices"""
+            try:
+                positions = self.db_manager.get_all_gps_positions()
+                
+                # Filter out invalid positions
+                valid_positions = []
+                for pos in positions:
+                    lat = pos.get('latitude', 0)
+                    lng = pos.get('longitude', 0)
+                    
+                    # Skip invalid coordinates
+                    if lat == 0 and lng == 0:
+                        continue
+                    if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+                        continue
+                    
+                    valid_positions.append(pos)
+                
+                return jsonify({
+                    'success': True,
+                    'positions': valid_positions,
+                    'count': len(valid_positions)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error fetching GPS positions: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @self.app.route('/api/gps/position/<terid>')
+        def get_gps_position(terid):
+            """Get GPS position for a specific device"""
+            try:
+                position = self.db_manager.get_gps_by_terid(terid)
+                
+                if not position:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Device not found or no GPS data available'
+                    }), 404
+                
+                return jsonify({
+                    'success': True,
+                    'position': position
+                })
+                
+            except Exception as e:
+                logger.error(f"Error fetching GPS position for {terid}: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @self.app.route('/gps-tracking')
+        def gps_tracking():
+            """GPS tracking page"""
+            return render_template('gps_tracking_new.html')
     
     def _get_alarm_data(self, hours: int = 24, limit: int = 1000, 
                        start_date: Optional[str] = None, end_date: Optional[str] = None,

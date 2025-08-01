@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+
+{% block title %}Alarm Heatmap - Brigade Electronics{% endblock %}
+
+{% block extra_head %}
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Date picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    
+    <style>
+        .controls-panel {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #e0e0e0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .control-group {
+            display: inline-block;
+            margin-right: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            min-width: 150px;
+        }
+
+        .btn-filter {
+            padding: 0.5rem 1.5rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn-filter:hover {
+            background: #2980b9;
+        }
+
+        .btn-reset {
+            padding: 0.5rem 1rem;
+            background: #95a5a6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 0.5rem;
+        }
+
+        #map {
+            position: absolute;
+            top: 120px;
+            bottom: 35px;
+            left: 0;
+            right: 0;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 140px;
+            right: 20px;
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 280px;
+            z-index: 1000;
+        }
+
+        .stats-panel h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.2rem;
+            color: #2c3e50;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .loading-spinner {
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="controls-panel">
+        <div class="control-group">
+            <label>Time Range</label>
+            <select id="time-range">
+                <option value="24">Last 24 Hours</option>
+                <option value="48">Last 48 Hours</option>
+                <option value="72">Last 72 Hours</option>
+                <option value="168">Last Week</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+
+        <div class="control-group" id="custom-date-group" style="display: none;">
+            <label>Date Range</label>
+            <input type="text" id="date-range" placeholder="Select date range">
+        </div>
+
+        <div class="control-group">
+            <label>Device</label>
+            <select id="device-filter">
+                <option value="">All Devices</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Alarm Types (Hold Ctrl to select multiple)</label>
+            <select id="alarm-type-filter" multiple size="3" style="min-height: 80px;">
+                <!-- Options will be populated dynamically -->
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>&nbsp;</label>
+            <button class="btn-filter" onclick="applyFilters()">Apply Filters</button>
+            <button class="btn-reset" onclick="resetFilters()">Reset</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="stats-panel">
+        <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+        <div class="stat-item">
+            <span class="stat-label">Total Alarms</span>
+            <span class="stat-value" id="total-alarms">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Active Devices</span>
+            <span class="stat-value" id="active-devices">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Time Range</span>
+            <span class="stat-value" id="time-range-display">Last 24 Hours</span>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Loading alarm data...</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.min.js"></script>
+    
+    <!-- Date picker -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([51.505, -0.09], 10);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Initialize heatmap layer
+        let heatmapLayer = null;
+        let currentMarkers = [];
+
+        // Initialize date picker
+        const dateRangePicker = flatpickr("#date-range", {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            maxDate: "today"
+        });
+
+        // Handle time range change
+        document.getElementById('time-range').addEventListener('change', function() {
+            const customGroup = document.getElementById('custom-date-group');
+            const displayElement = document.getElementById('time-range-display');
+            
+            if (this.value === 'custom') {
+                customGroup.style.display = 'inline-block';
+                displayElement.textContent = 'Custom Range';
+            } else {
+                customGroup.style.display = 'none';
+                const labels = {
+                    '24': 'Last 24 Hours',
+                    '48': 'Last 48 Hours', 
+                    '72': 'Last 72 Hours',
+                    '168': 'Last Week'
+                };
+                displayElement.textContent = labels[this.value] || 'Custom';
+            }
+        });
+
+        // Load devices for filter
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const deviceSelect = document.getElementById('device-filter');
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.terid;
+                        option.textContent = `${device.car_license} (${device.terid})`;
+                        deviceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        // Load alarm types for filter
+        async function loadAlarmTypes() {
+            try {
+                const response = await fetch('/api/alarm-types');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const alarmTypeSelect = document.getElementById('alarm-type-filter');
+                    
+                    // Clear existing options
+                    alarmTypeSelect.innerHTML = '';
+                    
+                    // Add options
+                    data.alarm_types.forEach(alarmType => {
+                        const option = document.createElement('option');
+                        option.value = alarmType.type;
+                        option.textContent = `${alarmType.name} (${alarmType.count})`;
+                        alarmTypeSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading alarm types:', error);
+            }
+        }
+
+        // Load and display heatmap data
+        async function loadHeatmapData() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            try {
+                // Build query parameters
+                const params = new URLSearchParams();
+                
+                const timeRange = document.getElementById('time-range').value;
+                if (timeRange === 'custom') {
+                    const dateRange = dateRangePicker.selectedDates;
+                    if (dateRange.length === 2) {
+                        params.append('start_date', dateRange[0].toISOString().split('T')[0] + ' 00:00:00');
+                        params.append('end_date', dateRange[1].toISOString().split('T')[0] + ' 23:59:59');
+                    }
+                } else {
+                    params.append('hours', timeRange);
+                }
+                
+                const deviceFilter = document.getElementById('device-filter').value;
+                if (deviceFilter) {
+                    params.append('device_id', deviceFilter);
+                }
+                
+                // Get selected alarm types
+                const alarmTypeSelect = document.getElementById('alarm-type-filter');
+                const selectedAlarmTypes = Array.from(alarmTypeSelect.selectedOptions).map(option => option.value);
+                if (selectedAlarmTypes.length > 0) {
+                    params.append('alarm_types', selectedAlarmTypes.join(','));
+                }
+                
+                params.append('limit', '10000');
+                
+                // Fetch data
+                const response = await fetch(`/api/alarms?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateHeatmap(data.data);
+                    updateStats(data);
+                } else {
+                    console.error('API error:', data.error);
+                    alert('Error loading alarm data: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error loading heatmap data:', error);
+                alert('Error loading alarm data. Please try again.');
+            } finally {
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+        }
+
+        // Update heatmap display
+        function updateHeatmap(alarmData) {
+            // Clear existing heatmap
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+            }
+            
+            // Clear existing markers
+            currentMarkers.forEach(marker => map.removeLayer(marker));
+            currentMarkers = [];
+            
+            if (alarmData.length === 0) {
+                alert('No alarm data found for the selected filters.');
+                return;
+            }
+            
+            // Prepare heatmap data
+            const heatData = alarmData.map(alarm => [
+                alarm.lat,
+                alarm.lng,
+                alarm.intensity || 0.5
+            ]);
+            
+            // Create heatmap layer
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 25,
+                blur: 15,
+                maxZoom: 17,
+                gradient: {
+                    0.0: 'blue',
+                    0.5: 'yellow',
+                    1.0: 'red'
+                }
+            }).addTo(map);
+            
+            // Add click markers for alarm details
+            alarmData.forEach(alarm => {
+                const marker = L.circleMarker([alarm.lat, alarm.lng], {
+                    radius: 5,
+                    fillColor: '#ff7800',
+                    color: '#000',
+                    weight: 1,
+                    opacity: 0,
+                    fillOpacity: 0
+                });
+                
+                marker.bindPopup(`
+                    <strong>Alarm Type:</strong> ${alarm.alarm_content || 'Unknown'}<br>
+                    <strong>Device:</strong> ${alarm.terid}<br>
+                    <strong>Time:</strong> ${alarm.gps_time}<br>
+                    <strong>Speed:</strong> ${alarm.speed} km/h
+                `);
+                
+                marker.addTo(map);
+                currentMarkers.push(marker);
+            });
+            
+            // Fit map to show all data points
+            if (alarmData.length > 0) {
+                const bounds = L.latLngBounds(alarmData.map(a => [a.lat, a.lng]));
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+
+        // Update statistics
+        function updateStats(data) {
+            document.getElementById('total-alarms').textContent = data.count || 0;
+            
+            // Get unique devices
+            const uniqueDevices = new Set(data.data.map(alarm => alarm.terid));
+            document.getElementById('active-devices').textContent = uniqueDevices.size;
+        }
+
+        // Apply filters
+        function applyFilters() {
+            loadHeatmapData();
+        }
+
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('time-range').value = '24';
+            document.getElementById('custom-date-group').style.display = 'none';
+            document.getElementById('device-filter').value = '';
+            document.getElementById('alarm-type-filter').selectedIndex = -1;
+            document.getElementById('time-range-display').textContent = 'Last 24 Hours';
+            dateRangePicker.clear();
+            
+            loadHeatmapData();
+        }
+
+        // Initialize
+        async function initialize() {
+            await loadDevices();
+            await loadAlarmTypes();
+            await loadHeatmapData();
+            
+            // Auto-refresh every 5 minutes
+            setInterval(() => {
+                loadHeatmapData();
+            }, 300000);
+        }
+
+        // Start
+        initialize();
+    </script>
+{% endblock %}
